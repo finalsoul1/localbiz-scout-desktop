@@ -322,168 +322,234 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <h1>상권스카우트</h1>
-          <p>지역 사업자 인허가 조회</p>
-        </div>
-        <div className="topbar-actions">
-          <span className={checkingPermissions ? "status-pill checking" : canSearch && availableBusinessTypes.length ? "status-pill ready" : "status-pill"}>
-            {checkingPermissions ? <span className="spinner tiny" aria-hidden="true" /> : null}
-            {permissionSummary}
-          </span>
-          <div className="joined-button-group" aria-label="승인 상태">
-            <button
-              type="button"
-              className={`secondary-button toggle-button joined-main ${permissionsOpen ? "active" : ""}`}
-              aria-pressed={permissionsOpen}
-              disabled={!canSearch}
-              onClick={() => setPermissionsOpen(!permissionsOpen)}
-            >
-              승인 상태
-            </button>
-            <button
-              type="button"
-              className="secondary-button icon-button joined-side"
-              disabled={!canSearch || checkingPermissions}
-              onClick={() => void refreshPermissions(settings)}
-              title="승인 상태 다시 확인"
-              aria-label="승인 상태 다시 확인"
-            >
-              ↻
-            </button>
+    <div className="app-shell">
+      <aside className="lnb" aria-label="상권스카우트 메뉴">
+        <div className="brand-lockup">
+          <span className="brand-mark" aria-hidden="true">S</span>
+          <div>
+            <strong>상권스카우트</strong>
+            <span>LocalBiz Scout</span>
           </div>
-          <button
-            type="button"
-            className={`secondary-button toggle-button ${settingsOpen ? "active" : ""}`}
-            aria-pressed={settingsOpen}
-            onClick={() => setSettingsOpen(!settingsOpen)}
-          >
+        </div>
+
+        <button type="button" className="workspace-select">
+          <span>군포 · 산본 조사</span>
+          <span aria-hidden="true">⌄</span>
+        </button>
+
+        <div className="lnb-quick-grid" aria-label="빠른 작업">
+          <button type="button" className={settingsOpen ? "active" : ""} onClick={() => setSettingsOpen(!settingsOpen)}>
+            <span aria-hidden="true">⚙</span>
             설정
           </button>
+          <button type="button" className={permissionsOpen ? "active" : ""} disabled={!canSearch} onClick={() => setPermissionsOpen(!permissionsOpen)}>
+            <span aria-hidden="true">✓</span>
+            승인
+          </button>
+          <button type="button" disabled={!canSearch || checkingPermissions} onClick={() => void refreshPermissions(settings)}>
+            <span aria-hidden="true">↻</span>
+            갱신
+          </button>
         </div>
-      </header>
 
-      {settingsOpen ? (
-        <SettingsPanel settings={settings} onSave={handleSaveSettings} onClear={handleClearSettings} onClose={() => setSettingsOpen(false)} />
-      ) : null}
+        <nav className="lnb-nav" aria-label="주 메뉴">
+          <section>
+            <p>조회</p>
+            <a className="active" href="#search-panel">사업자 조회</a>
+            <a href="#result-panel">조회 결과</a>
+            <a href="#export-actions">CSV 저장</a>
+          </section>
+          <section>
+            <p>데이터</p>
+            <a href="#permission-panel">승인 상태</a>
+            <a href="#settings-panel">API 설정</a>
+          </section>
+        </nav>
 
-      {!isTauriRuntime ? (
-        <section className="notice-box">
-          브라우저 개발 모드에서는 공공데이터 API의 CORS 정책 때문에 실제 조회가 실패할 수 있습니다. 실제 조회 테스트는 `npm run tauri dev`로 실행하세요.
+        <div className="lnb-status-card">
+          <span className={checkingPermissions ? "status-dot checking" : canSearch && availableBusinessTypes.length ? "status-dot ready" : "status-dot"} />
+          <div>
+            <strong>{permissionSummary}</strong>
+            <span>{settings.kakaoRestApiKey ? "Kakao 보강 켜짐" : "Kakao 보강 꺼짐"}</span>
+          </div>
+        </div>
+      </aside>
+
+      <main className="workspace">
+        <header className="workspace-topbar">
+          <div>
+            <span className="eyebrow">지역 사업자 인허가 조회</span>
+            <h1>사업자 조회</h1>
+          </div>
+          <div className="topbar-actions">
+            <span className={checkingPermissions ? "status-pill checking" : canSearch && availableBusinessTypes.length ? "status-pill ready" : "status-pill"}>
+              {checkingPermissions ? <span className="spinner tiny" aria-hidden="true" /> : null}
+              {permissionSummary}
+            </span>
+            <div className="joined-button-group" aria-label="승인 상태">
+              <button
+                type="button"
+                className={`secondary-button toggle-button joined-main ${permissionsOpen ? "active" : ""}`}
+                aria-pressed={permissionsOpen}
+                disabled={!canSearch}
+                onClick={() => setPermissionsOpen(!permissionsOpen)}
+              >
+                승인 상태
+              </button>
+              <button
+                type="button"
+                className="secondary-button icon-button joined-side"
+                disabled={!canSearch || checkingPermissions}
+                onClick={() => void refreshPermissions(settings)}
+                title="승인 상태 다시 확인"
+                aria-label="승인 상태 다시 확인"
+              >
+                ↻
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <section className="summary-grid" aria-label="조회 요약">
+          <SummaryCard label="표시 결과" value={summary} tone="mint" />
+          <SummaryCard label="승인 업종" value={`${availableBusinessTypes.length}/${businessTypeKeys.length}개`} />
+          <SummaryCard label="현재 페이지" value={`${filters.pageNo.toLocaleString("ko-KR")}페이지`} />
         </section>
-      ) : null}
 
-      {permissionsOpen ? (
-        <PermissionPanel statuses={permissionStatuses} checking={checkingPermissions} onRefresh={() => void refreshPermissions(settings)} />
-      ) : null}
+        {settingsOpen ? (
+          <div id="settings-panel">
+            <SettingsPanel settings={settings} onSave={handleSaveSettings} onClear={handleClearSettings} onClose={() => setSettingsOpen(false)} />
+          </div>
+        ) : null}
 
-      <section className="toolbar" aria-label="검색 조건">
-        <label>
-          지역
-          <select value={filters.region} onChange={(event) => updateFilters({ region: event.target.value })}>
-            <option value="산본">산본</option>
-            <option value="군포">군포</option>
-            <option value="군포시">군포시</option>
-          </select>
-        </label>
-        <label>
-          시작일
-          <input type="date" value={filters.fromDate} onChange={(event) => updateFilters({ fromDate: event.target.value })} />
-        </label>
-        <label>
-          종료일
-          <input type="date" value={filters.toDate} onChange={(event) => updateFilters({ toDate: event.target.value })} />
-        </label>
-        <label>
-          업종
-          <select value={filters.businessType} onChange={(event) => updateFilters({ businessType: event.target.value as SearchFilters["businessType"] })}>
-            <option value="all">전체 업종</option>
-            {businessTypeKeys.map((businessType) => {
-              const status = permissionStatuses.find((item) => item.businessType === businessType);
-              return (
-                <option key={businessType} value={businessType}>
-                  {businessTypeMeta[businessType].label}
-                  {status && status.status !== "available" ? " (승인 필요)" : ""}
-                </option>
-              );
-            })}
-          </select>
-        </label>
-        <label>
-          상태
-          <select value={filters.status} onChange={(event) => updateFilters({ status: event.target.value as SearchFilters["status"] })}>
-            <option value="active">영업</option>
-            <option value="all">전체</option>
-          </select>
-        </label>
-        <label>
-          키워드
-          <input value={filters.keyword} placeholder="사업자명" onChange={(event) => updateFilters({ keyword: event.target.value })} />
-        </label>
-        <label>
-          건수
-          <input
-            type="number"
-            min={minPageSize}
-            max={maxPageSize}
-            value={pageSizeInput}
-            onBlur={handlePageSizeBlur}
-            onChange={(event) => handlePageSizeChange(event.target.value)}
-          />
-        </label>
-      </section>
+        {!isTauriRuntime ? (
+          <section className="notice-box">
+            브라우저 개발 모드에서는 공공데이터 API의 CORS 정책 때문에 실제 조회가 실패할 수 있습니다. 실제 조회 테스트는 `npm run tauri dev`로 실행하세요.
+          </section>
+        ) : null}
 
-      <section className="client-filter-row" aria-label="화면 필터">
-        <label className="checkbox-label">
-          <input type="checkbox" checked={hideMaskedAddress} onChange={(event) => setHideMaskedAddress(event.target.checked)} />
-          마스킹 주소 제외
-        </label>
-        <span>{hideMaskedAddress ? "주소에 *가 포함된 결과를 화면과 CSV에서 제외합니다." : "공공데이터 원본 결과를 그대로 표시합니다."}</span>
-      </section>
+        {permissionsOpen ? (
+          <div id="permission-panel">
+            <PermissionPanel statuses={permissionStatuses} checking={checkingPermissions} onRefresh={() => void refreshPermissions(settings)} />
+          </div>
+        ) : null}
 
-      <section className="action-row">
-        <div>
-          <strong>{summary}</strong>
-          <span>{loading ? "전체 업종을 조회하고 최근 순으로 정리하는 중" : "기본 정렬: 인허가일자 최근 순"}</span>
+        <section id="search-panel" className="search-card" aria-label="검색 조건">
+          <div className="section-heading">
+            <div>
+              <h2>조회 조건</h2>
+              <p>지역, 기간, 업종을 조합해 최근 인허가 순으로 확인합니다.</p>
+            </div>
+            <button type="button" className="primary-button" disabled={!canSearch || loading || selectedTypeBlocked} onClick={handleSearch}>
+              {loading ? (
+                <span className="button-loading">
+                  <span className="spinner small" aria-hidden="true" />
+                  조회 중
+                </span>
+              ) : (
+                "조회"
+              )}
+            </button>
+          </div>
+          <div className="toolbar">
+            <label>
+              지역
+              <select value={filters.region} onChange={(event) => updateFilters({ region: event.target.value })}>
+                <option value="산본">산본</option>
+                <option value="군포">군포</option>
+                <option value="군포시">군포시</option>
+              </select>
+            </label>
+            <label>
+              시작일
+              <input type="date" value={filters.fromDate} onChange={(event) => updateFilters({ fromDate: event.target.value })} />
+            </label>
+            <label>
+              종료일
+              <input type="date" value={filters.toDate} onChange={(event) => updateFilters({ toDate: event.target.value })} />
+            </label>
+            <label>
+              업종
+              <select value={filters.businessType} onChange={(event) => updateFilters({ businessType: event.target.value as SearchFilters["businessType"] })}>
+                <option value="all">전체 업종</option>
+                {businessTypeKeys.map((businessType) => {
+                  const status = permissionStatuses.find((item) => item.businessType === businessType);
+                  return (
+                    <option key={businessType} value={businessType}>
+                      {businessTypeMeta[businessType].label}
+                      {status && status.status !== "available" ? " (승인 필요)" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+            <label>
+              상태
+              <select value={filters.status} onChange={(event) => updateFilters({ status: event.target.value as SearchFilters["status"] })}>
+                <option value="active">영업</option>
+                <option value="all">전체</option>
+              </select>
+            </label>
+            <label>
+              키워드
+              <input value={filters.keyword} placeholder="사업자명" onChange={(event) => updateFilters({ keyword: event.target.value })} />
+            </label>
+            <label>
+              건수
+              <input
+                type="number"
+                min={minPageSize}
+                max={maxPageSize}
+                value={pageSizeInput}
+                onBlur={handlePageSizeBlur}
+                onChange={(event) => handlePageSizeChange(event.target.value)}
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="client-filter-row" aria-label="화면 필터">
+          <label className="checkbox-label">
+            <input type="checkbox" checked={hideMaskedAddress} onChange={(event) => setHideMaskedAddress(event.target.checked)} />
+            마스킹 주소 제외
+          </label>
+          <span>{hideMaskedAddress ? "주소에 *가 포함된 결과를 화면과 CSV에서 제외합니다." : "공공데이터 원본 결과를 그대로 표시합니다."}</span>
+        </section>
+
+        <section id="export-actions" className="action-row">
+          <div>
+            <strong>{summary}</strong>
+            <span>{loading ? "전체 업종을 조회하고 최근 순으로 정리하는 중" : "기본 정렬: 인허가일자 최근 순"}</span>
+          </div>
+          <div className="button-row">
+            <button type="button" className="secondary-button" disabled={!displayedItems.length || Boolean(savingCsv)} onClick={handlePageCsvSave}>
+              {savingCsv === "page" ? "저장 중" : "현재 페이지 CSV"}
+            </button>
+            <button type="button" className="secondary-button" disabled={!canSearch || loading || Boolean(savingCsv) || selectedTypeBlocked} onClick={handleAllCsvSave}>
+              {savingCsv === "all" ? "수집 중" : "전체 결과 CSV"}
+            </button>
+          </div>
+        </section>
+
+        {error ? <div className="error-box">{error}</div> : null}
+        {selectedTypeBlocked && selectedPermission ? <div className="error-box">{selectedPermission.label} API 승인 필요: {selectedPermission.serviceName}</div> : null}
+        {notice ? <div className="success-box">{notice}</div> : null}
+
+        <div id="result-panel">
+          <BusinessTable items={displayedItems} loading={loading} hideMaskedAddress={hideMaskedAddress} />
         </div>
-        <div className="button-row">
-          <button type="button" className="primary-button" disabled={!canSearch || loading || selectedTypeBlocked} onClick={handleSearch}>
-            {loading ? (
-              <span className="button-loading">
-                <span className="spinner small" aria-hidden="true" />
-                조회 중
-              </span>
-            ) : (
-              "조회"
-            )}
-          </button>
-          <button type="button" className="secondary-button" disabled={!displayedItems.length || Boolean(savingCsv)} onClick={handlePageCsvSave}>
-            {savingCsv === "page" ? "저장 중" : "현재 페이지 CSV"}
-          </button>
-          <button type="button" className="secondary-button" disabled={!canSearch || loading || Boolean(savingCsv) || selectedTypeBlocked} onClick={handleAllCsvSave}>
-            {savingCsv === "all" ? "수집 중" : "전체 결과 CSV"}
-          </button>
-        </div>
-      </section>
+        <Pagination
+          pageNo={filters.pageNo}
+          pageSize={filters.pageSize}
+          itemCount={items.length}
+          loading={loading}
+          canSearch={canSearch}
+          onPageChange={handlePageChange}
+        />
 
-      {error ? <div className="error-box">{error}</div> : null}
-      {selectedTypeBlocked && selectedPermission ? <div className="error-box">{selectedPermission.label} API 승인 필요: {selectedPermission.serviceName}</div> : null}
-      {notice ? <div className="success-box">{notice}</div> : null}
-
-      <BusinessTable items={displayedItems} loading={loading} hideMaskedAddress={hideMaskedAddress} />
-      <Pagination
-        pageNo={filters.pageNo}
-        pageSize={filters.pageSize}
-        itemCount={items.length}
-        loading={loading}
-        canSearch={canSearch}
-        onPageChange={handlePageChange}
-      />
-
-      {toast ? <Toast toast={toast} onClose={() => setToast(null)} onOpenLocation={handleOpenCsvLocation} /> : null}
-    </main>
+        {toast ? <Toast toast={toast} onClose={() => setToast(null)} onOpenLocation={handleOpenCsvLocation} /> : null}
+      </main>
+    </div>
   );
 
   async function handleOpenCsvLocation(path: string) {
@@ -515,6 +581,15 @@ function clampPageSize(value: number) {
 
 function hasMaskedAddress(item: Business) {
   return item.roadAddress.includes("*") || item.jibunAddress.includes("*");
+}
+
+function SummaryCard({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "mint" }) {
+  return (
+    <article className={`summary-card ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
 }
 
 function Pagination({
