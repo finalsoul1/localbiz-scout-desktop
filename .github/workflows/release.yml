@@ -85,15 +85,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Windows installers
-        run: npm run tauri build -- --bundles msi,nsis
+      - name: Build Windows installer
+        run: npm run tauri build -- --bundles nsis
 
-      - name: Rename Windows installers
+      - name: Rename Windows installer
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          Get-ChildItem src-tauri/target/release/bundle/msi -Filter *.msi -ErrorAction SilentlyContinue |
-            ForEach-Object { Copy-Item $_.FullName "release-assets/sanggwon-scout-$env:GITHUB_REF_NAME-windows-x64.msi" }
           Get-ChildItem src-tauri/target/release/bundle/nsis -Filter *.exe -ErrorAction SilentlyContinue |
             ForEach-Object { Copy-Item $_.FullName "release-assets/sanggwon-scout-$env:GITHUB_REF_NAME-windows-x64-setup.exe" }
 
