@@ -155,7 +155,7 @@ select {
 
 .workspace {
   min-width: 0;
-  padding: 18px 32px 24px;
+  padding: 18px 32px 72px;
   background: #ffffff;
   scroll-behavior: smooth;
 }
@@ -608,9 +608,33 @@ select {
 
 .result-controls {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   max-width: 1080px;
-  margin: -6px 0 10px;
+  margin: 2px 0 10px;
+}
+
+.result-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.result-count span {
+  color: inherit;
+  font-size: inherit;
+  font-weight: 700;
+}
+
+.result-count strong {
+  color: #202428;
+  font-size: inherit;
+  font-weight: 800;
+  line-height: inherit;
 }
 
 .client-filter-row span {
@@ -668,15 +692,17 @@ select:focus {
 }
 
 .pagination-bar {
-  position: sticky;
+  position: fixed;
+  right: 0;
   bottom: 0;
+  left: 236px;
   z-index: 10;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin: 10px -32px -24px;
+  margin: 0;
   border-top: 1px solid #eceff3;
   padding: 8px 32px;
   background: rgb(255 255 255 / 94%);
@@ -808,12 +834,38 @@ button:disabled {
 }
 
 .success-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   border: 1px solid #abefc6;
   border-radius: 8px;
   padding: 12px 14px;
   margin-bottom: 16px;
   color: #067647;
   background: #f6fef9;
+}
+
+.success-box span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inline-action-button {
+  flex: 0 0 auto;
+  height: 30px;
+  border: 1px solid #86d8a8;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #067647;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.inline-action-button:hover {
+  background: #ecfdf3;
 }
 
 .notice-box {
@@ -1077,7 +1129,7 @@ small {
   }
 
   .workspace {
-    padding: 16px;
+    padding: 16px 16px 72px;
   }
 
   .workspace-topbar,
@@ -1115,9 +1167,8 @@ small {
   }
 
   .pagination-bar {
-    margin-right: -16px;
-    margin-bottom: -16px;
-    margin-left: -16px;
+    left: 0;
+    margin: 0;
     padding-right: 16px;
     padding-left: 16px;
   }

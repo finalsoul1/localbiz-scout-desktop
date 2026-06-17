@@ -41,6 +41,7 @@ export function App() {
   const [savingCsv, setSavingCsv] = useState<"page" | "all" | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [noticeFilePath, setNoticeFilePath] = useState("");
   const [toast, setToast] = useState<ToastState | null>(null);
   const [permissionStatuses, setPermissionStatuses] = useState<ApiPermissionStatus[]>(() => loadPermissionStatus()?.statuses || []);
   const [checkingPermissions, setCheckingPermissions] = useState(false);
@@ -89,6 +90,7 @@ export function App() {
     setLoading(true);
     setError("");
     setNotice("");
+    setNoticeFilePath("");
 
     try {
       const nextPermission = nextFilters.businessType === "all" ? null : permissionStatuses.find((status) => status.businessType === nextFilters.businessType);
@@ -236,6 +238,7 @@ export function App() {
     setSavingCsv("page");
     setError("");
     setNotice("");
+    setNoticeFilePath("");
     showToast({
       type: "saving",
       title: "현재 페이지 CSV 저장 중",
@@ -245,12 +248,8 @@ export function App() {
     try {
       const savedPath = await downloadCsv(displayedItems);
       setNotice(`CSV 저장 완료: ${savedPath}`);
-      showToast({
-        type: "success",
-        title: "현재 페이지 CSV 저장 완료",
-        message: savedPath,
-        filePath: savedPath
-      });
+      setNoticeFilePath(savedPath);
+      setToast(null);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "CSV 저장 중 오류가 발생했습니다.";
       setError(message);
@@ -268,6 +267,7 @@ export function App() {
     setSavingCsv("all");
     setError("");
     setNotice("");
+    setNoticeFilePath("");
     showToast({
       type: "saving",
       title: "전체 결과 CSV 저장 중",
@@ -283,12 +283,8 @@ export function App() {
 
       const savedPath = await downloadCsv(exportItems);
       setNotice(`전체 결과 CSV 저장 완료: ${exportItems.length.toLocaleString("ko-KR")}건 · ${savedPath}`);
-      showToast({
-        type: "success",
-        title: "전체 결과 CSV 저장 완료",
-        message: `${exportItems.length.toLocaleString("ko-KR")}건 저장 · ${savedPath}`,
-        filePath: savedPath
-      });
+      setNoticeFilePath(savedPath);
+      setToast(null);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "CSV 저장 중 오류가 발생했습니다.";
       setError(message);
@@ -388,7 +384,16 @@ export function App() {
 
         {error ? <div className="error-box">{error}</div> : null}
         {selectedTypeBlocked && selectedPermission ? <div className="error-box">{selectedPermission.label} API 승인 필요: {selectedPermission.serviceName}</div> : null}
-        {notice ? <div className="success-box">{notice}</div> : null}
+        {notice ? (
+          <div className="success-box">
+            <span>{notice}</span>
+            {noticeFilePath ? (
+              <button type="button" className="inline-action-button" onClick={() => void handleOpenCsvLocation(noticeFilePath)}>
+                파일 위치 열기
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {activeView === "business" ? (
           <BusinessView
@@ -598,11 +603,7 @@ function BusinessView({
           </label>
         </div>
       </section>
-      <section className="summary-grid" aria-label="조회 요약">
-        <SummaryCard label="표시 결과" value={summary} tone="mint" />
-        <SummaryCard label="현재 페이지" value={`${pageNo.toLocaleString("ko-KR")}페이지`} />
-      </section>
-      <ResultControls hideMaskedAddress={hideMaskedAddress} onHideMaskedAddressChange={onHideMaskedAddressChange} />
+      <ResultControls summary={summary} hideMaskedAddress={hideMaskedAddress} onHideMaskedAddressChange={onHideMaskedAddressChange} />
       <BusinessTable items={items} loading={loading} hideMaskedAddress={hideMaskedAddress} />
       <Pagination pageNo={pageNo} pageSize={pageSize} itemCount={itemCount} loading={loading} canSearch={canSearch} onPageChange={onPageChange} />
     </>
@@ -659,14 +660,20 @@ function ExportView({
 }
 
 function ResultControls({
+  summary,
   hideMaskedAddress,
   onHideMaskedAddressChange
 }: {
+  summary: string;
   hideMaskedAddress: boolean;
   onHideMaskedAddressChange: (nextValue: boolean) => void;
 }) {
   return (
     <section className="result-controls" aria-label="결과 옵션">
+      <div className="result-count">
+        <span>표시 결과</span>
+        <strong>{summary}</strong>
+      </div>
       <MaskedAddressFilter hideMaskedAddress={hideMaskedAddress} onChange={onHideMaskedAddressChange} compact />
     </section>
   );
