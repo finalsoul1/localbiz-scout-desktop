@@ -1,0 +1,111 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS app
+        run: npm run tauri build -- --bundles app
+
+      - name: Package macOS app
+        run: |
+          ARCH="$(uname -m)"
+          ditto -c -k --sequesterRsrc --keepParent \
+            "src-tauri/target/release/bundle/macos/상권스카우트.app" \
+            "sanggwon-scout-${GITHUB_REF_NAME}-macos-${ARCH}.app.zip"
+
+      - name: Upload macOS release asset
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: sanggwon-scout-${{ github.ref_name }}-macos-*.app.zip
+
+      - name: Upload macOS workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanggwon-scout-macos
+          path: sanggwon-scout-${{ github.ref_name }}-macos-*.app.zip
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installers
+        run: npm run tauri build -- --bundles msi,nsis
+
+      - name: Rename Windows installers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Get-ChildItem src-tauri/target/release/bundle/msi -Filter *.msi -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName "release-assets/sanggwon-scout-$env:GITHUB_REF_NAME-windows-x64.msi" }
+          Get-ChildItem src-tauri/target/release/bundle/nsis -Filter *.exe -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName "release-assets/sanggwon-scout-$env:GITHUB_REF_NAME-windows-x64-setup.exe" }
+
+      - name: Upload Windows release assets
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: release-assets/*
+
+      - name: Upload Windows workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanggwon-scout-windows
+          path: release-assets/*
+          if-no-files-found: error
