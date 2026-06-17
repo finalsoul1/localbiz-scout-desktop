@@ -26,8 +26,6 @@ npm run dev
 
 `KAKAO_REST_API_KEY`를 비워두면 Kakao Local API 호출 없이 공공데이터 결과만 표시합니다.
 
-현재 MVP는 설정값을 브라우저/Tauri WebView의 localStorage에 저장합니다. 배포 전에는 OS Keychain 저장으로 교체하는 것을 권장합니다.
-
 ## 지원 조회
 
 | 조건 | 설명 |
