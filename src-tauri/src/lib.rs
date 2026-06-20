@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
@@ -15,6 +16,8 @@ struct AppSettings {
 #[serde(rename_all = "camelCase")]
 struct SearchFilters {
     region: String,
+    #[serde(default)]
+    regions: Vec<String>,
     from_date: String,
     to_date: String,
     business_type: String,
@@ -158,14 +161,17 @@ async fn search_businesses(settings: AppSettings, filters: SearchFilters) -> Res
 
     let client = reqwest::Client::new();
     let target_endpoints = target_endpoints(&filters)?;
+    let target_regions = target_regions(&filters);
 
     let mut businesses = Vec::new();
     let mut errors = Vec::new();
 
     for endpoint in target_endpoints {
-        match fetch_businesses(&client, &settings, &filters, endpoint).await {
-            Ok(mut items) => businesses.append(&mut items),
-            Err(error) => errors.push(format!("{}: {error}", endpoint.label)),
+        for region in &target_regions {
+            match fetch_businesses(&client, &settings, &filters, endpoint, region).await {
+                Ok(mut items) => businesses.append(&mut items),
+                Err(error) => errors.push(format!("{} · {}: {error}", region, endpoint.label)),
+            }
         }
     }
 
@@ -177,6 +183,7 @@ async fn search_businesses(settings: AppSettings, filters: SearchFilters) -> Res
     let page_no = filters.page_no.max(1) as usize;
     let start = (page_no - 1) * page_size;
 
+    businesses = dedupe_businesses(businesses);
     businesses.sort_by(|left, right| right.license_date.cmp(&left.license_date));
     let mut page_items: Vec<Business> = businesses
         .into_iter()
@@ -196,14 +203,17 @@ async fn export_businesses(settings: AppSettings, filters: SearchFilters) -> Res
 
     let client = reqwest::Client::new();
     let target_endpoints = target_endpoints(&filters)?;
+    let target_regions = target_regions(&filters);
 
     let mut businesses = Vec::new();
     let mut errors = Vec::new();
 
     for endpoint in target_endpoints {
-        match fetch_all_businesses(&client, &settings, &filters, endpoint).await {
-            Ok(mut items) => businesses.append(&mut items),
-            Err(error) => errors.push(format!("{}: {error}", endpoint.label)),
+        for region in &target_regions {
+            match fetch_all_businesses(&client, &settings, &filters, endpoint, region).await {
+                Ok(mut items) => businesses.append(&mut items),
+                Err(error) => errors.push(format!("{} · {}: {error}", region, endpoint.label)),
+            }
         }
     }
 
@@ -211,6 +221,7 @@ async fn export_businesses(settings: AppSettings, filters: SearchFilters) -> Res
         return Err(errors.join("\n"));
     }
 
+    businesses = dedupe_businesses(businesses);
     businesses.sort_by(|left, right| right.license_date.cmp(&left.license_date));
     enrich_businesses_with_kakao(&client, &settings.kakao_rest_api_key, &mut businesses).await;
     Ok(businesses)
@@ -286,13 +297,14 @@ async fn fetch_businesses(
     settings: &AppSettings,
     filters: &SearchFilters,
     endpoint: EndpointSpec,
+    region: &str,
 ) -> Result<Vec<Business>, String> {
     let page_size = filters.page_size.clamp(10, 100);
     let page_no = filters.page_no.max(1);
     let mut businesses = Vec::new();
 
     for page in 1..=page_no {
-        let mut business_page = fetch_business_page(client, settings, filters, endpoint, page, page_size).await?;
+        let mut business_page = fetch_business_page(client, settings, filters, endpoint, region, page, page_size).await?;
         businesses.append(&mut business_page.businesses);
     }
 
@@ -304,15 +316,16 @@ async fn fetch_all_businesses(
     settings: &AppSettings,
     filters: &SearchFilters,
     endpoint: EndpointSpec,
+    region: &str,
 ) -> Result<Vec<Business>, String> {
     let page_size = 100;
-    let mut first_page = fetch_business_page(client, settings, filters, endpoint, 1, page_size).await?;
+    let mut first_page = fetch_business_page(client, settings, filters, endpoint, region, 1, page_size).await?;
     let total_pages = total_pages(first_page.total_count, page_size as usize);
     let mut businesses = Vec::new();
     businesses.append(&mut first_page.businesses);
 
     for page in 2..=total_pages {
-        let mut business_page = fetch_business_page(client, settings, filters, endpoint, page, page_size).await?;
+        let mut business_page = fetch_business_page(client, settings, filters, endpoint, region, page, page_size).await?;
         businesses.append(&mut business_page.businesses);
     }
 
@@ -324,6 +337,7 @@ async fn fetch_business_page(
     settings: &AppSettings,
     filters: &SearchFilters,
     endpoint: EndpointSpec,
+    region: &str,
     page_no: u16,
     page_size: u16,
 ) -> Result<BusinessPage, String> {
@@ -336,7 +350,7 @@ async fn fetch_business_page(
         ])
         .query(&[("numOfRows", page_size.to_string())]);
 
-    if let Some(region_code) = region_code(&filters.region) {
+    if let Some(region_code) = region_code(region) {
         request = request.query(&[("cond[OPN_ATMY_GRP_CD::EQ]", region_code)]);
     }
 
@@ -386,17 +400,7 @@ async fn fetch_business_page(
     let businesses: Vec<Business> = items
         .iter()
         .map(|item| normalize_business(item, endpoint))
-        .filter(|business| {
-            if filters.region.contains("산본") {
-                business.road_address.contains("산본") || business.jibun_address.contains("산본")
-            } else if region_code(&filters.region).is_none() && !filters.region.trim().is_empty() {
-                business.road_address.contains(&filters.region)
-                    || business.jibun_address.contains(&filters.region)
-                    || business.business_name.contains(&filters.region)
-            } else {
-                true
-            }
-        })
+        .filter(|business| matches_region(business, region))
         .collect();
 
     Ok(BusinessPage {
@@ -428,6 +432,22 @@ fn target_endpoints(filters: &SearchFilters) -> Result<Vec<EndpointSpec>, String
     }
 
     Ok(endpoints)
+}
+
+fn target_regions(filters: &SearchFilters) -> Vec<String> {
+    let source = if filters.regions.is_empty() {
+        vec![filters.region.clone()]
+    } else {
+        filters.regions.clone()
+    };
+
+    let mut seen = HashSet::new();
+    source
+        .into_iter()
+        .map(|region| region.trim().to_string())
+        .filter(|region| !region.is_empty())
+        .filter(|region| seen.insert(region.clone()))
+        .collect()
 }
 
 fn permission_status_from_payload(endpoint: EndpointSpec, payload: &Value) -> ApiPermissionStatus {
@@ -726,9 +746,81 @@ fn normalize_status(value: &str) -> String {
 
 fn region_code(region: &str) -> Option<&'static str> {
     match region {
+        "수원" | "수원시" => Some("3740000"),
+        "성남" | "성남시" | "분당" | "분당구" => Some("3780000"),
+        "의정부" | "의정부시" => Some("3820000"),
+        "안양" | "안양시" => Some("3830000"),
+        "부천" | "부천시" => Some("3860000"),
+        "광명" | "광명시" => Some("3900000"),
+        "평택" | "평택시" => Some("3910000"),
+        "동두천" | "동두천시" => Some("3920000"),
+        "안산" | "안산시" => Some("3930000"),
+        "고양" | "고양시" | "일산" | "일산동구" | "일산서구" => Some("3940000"),
+        "과천" | "과천시" => Some("3970000"),
+        "구리" | "구리시" => Some("3980000"),
+        "남양주" | "남양주시" => Some("3990000"),
+        "오산" | "오산시" => Some("4000000"),
+        "시흥" | "시흥시" => Some("4010000"),
         "군포" | "군포시" | "산본" | "산본동" => Some("4020000"),
+        "의왕" | "의왕시" => Some("4030000"),
+        "하남" | "하남시" => Some("4040000"),
+        "용인" | "용인시" => Some("4050000"),
+        "파주" | "파주시" => Some("4060000"),
+        "이천" | "이천시" => Some("4070000"),
+        "안성" | "안성시" => Some("4080000"),
+        "김포" | "김포시" => Some("4090000"),
+        "화성" | "화성시" => Some("5530000"),
+        "광주" | "광주시" => Some("5540000"),
+        "양주" | "양주시" => Some("5590000"),
+        "포천" | "포천시" => Some("5600000"),
+        "여주" | "여주시" => Some("5700000"),
+        "연천" | "연천군" => Some("4140000"),
+        "가평" | "가평군" => Some("4160000"),
+        "양평" | "양평군" => Some("4170000"),
         _ => None,
     }
+}
+
+fn region_keyword(region: &str) -> Option<&'static str> {
+    match region {
+        "산본" | "산본동" => Some("산본"),
+        "분당" | "분당구" => Some("분당"),
+        "일산" | "일산동구" | "일산서구" => Some("일산"),
+        _ => None,
+    }
+}
+
+fn matches_region(business: &Business, region: &str) -> bool {
+    if let Some(keyword) = region_keyword(region) {
+        return business.road_address.contains(keyword) || business.jibun_address.contains(keyword);
+    }
+
+    if region_code(region).is_none() && !region.trim().is_empty() {
+        return business.road_address.contains(region)
+            || business.jibun_address.contains(region)
+            || business.business_name.contains(region);
+    }
+
+    true
+}
+
+fn dedupe_businesses(items: Vec<Business>) -> Vec<Business> {
+    let mut seen = HashSet::new();
+    items
+        .into_iter()
+        .filter(|item| {
+            let key = if item.id.is_empty() {
+                format!(
+                    "{}-{}-{}-{}",
+                    item.business_name, item.license_date, item.road_address, item.jibun_address
+                )
+            } else {
+                item.id.clone()
+            };
+
+            seen.insert(key)
+        })
+        .collect()
 }
 
 fn compact_date(value: &str) -> Option<String> {

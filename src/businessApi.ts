@@ -76,12 +76,52 @@ export const businessTypeMeta: Record<Exclude<BusinessTypeKey, "all">, { label: 
   }
 };
 
-const regionCodes: Record<string, string> = {
-  "군포": "4020000",
-  "군포시": "4020000",
-  "산본": "4020000",
-  "산본동": "4020000"
+export type RegionOption = {
+  label: string;
+  code: string;
+  keyword?: string;
 };
+
+export const regionOptions: RegionOption[] = [
+  { label: "산본", code: "4020000", keyword: "산본" },
+  { label: "분당", code: "3780000", keyword: "분당" },
+  { label: "일산", code: "3940000", keyword: "일산" },
+  { label: "수원", code: "3740000" },
+  { label: "성남", code: "3780000" },
+  { label: "의정부", code: "3820000" },
+  { label: "안양", code: "3830000" },
+  { label: "부천", code: "3860000" },
+  { label: "광명", code: "3900000" },
+  { label: "평택", code: "3910000" },
+  { label: "동두천", code: "3920000" },
+  { label: "안산", code: "3930000" },
+  { label: "고양", code: "3940000" },
+  { label: "과천", code: "3970000" },
+  { label: "구리", code: "3980000" },
+  { label: "남양주", code: "3990000" },
+  { label: "오산", code: "4000000" },
+  { label: "시흥", code: "4010000" },
+  { label: "군포", code: "4020000" },
+  { label: "군포시", code: "4020000" },
+  { label: "의왕", code: "4030000" },
+  { label: "하남", code: "4040000" },
+  { label: "용인", code: "4050000" },
+  { label: "파주", code: "4060000" },
+  { label: "이천", code: "4070000" },
+  { label: "안성", code: "4080000" },
+  { label: "김포", code: "4090000" },
+  { label: "화성", code: "5530000" },
+  { label: "광주", code: "5540000" },
+  { label: "양주", code: "5590000" },
+  { label: "포천", code: "5600000" },
+  { label: "여주", code: "5700000" },
+  { label: "연천", code: "4140000" },
+  { label: "가평", code: "4160000" },
+  { label: "양평", code: "4170000" }
+];
+
+const regionCodeMap = new Map(regionOptions.map((region) => [region.label, region.code]));
+const regionKeywordMap = new Map(regionOptions.filter((region) => region.keyword).map((region) => [region.label, region.keyword || region.label]));
 
 export async function searchBusinesses(settings: AppSettings, filters: SearchFilters): Promise<Business[]> {
   if (!settings.publicDataServiceKey) {
@@ -94,12 +134,12 @@ export async function searchBusinesses(settings: AppSettings, filters: SearchFil
   }
 
   const targetTypes = resolveTargetTypes(filters);
-  const results = await Promise.all(targetTypes.map((businessType) => fetchBusinesses(settings, filters, businessType)));
+  const targetRegions = resolveTargetRegions(filters);
+  const results = await Promise.all(targetTypes.flatMap((businessType) => targetRegions.map((region) => fetchBusinesses(settings, filters, businessType, region))));
   const pageSize = Math.min(Math.max(filters.pageSize, 10), 100);
   const pageNo = Math.max(filters.pageNo, 1);
   const start = (pageNo - 1) * pageSize;
-  return results
-    .flat()
+  return dedupeBusinesses(results.flat())
     .sort((left, right) => right.licenseDate.localeCompare(left.licenseDate))
     .slice(start, start + pageSize);
 }
@@ -115,8 +155,9 @@ export async function exportBusinesses(settings: AppSettings, filters: SearchFil
   }
 
   const targetTypes = resolveTargetTypes(filters);
-  const results = await Promise.all(targetTypes.map((businessType) => fetchAllBusinesses(settings, filters, businessType)));
-  return results.flat().sort((left, right) => right.licenseDate.localeCompare(left.licenseDate));
+  const targetRegions = resolveTargetRegions(filters);
+  const results = await Promise.all(targetTypes.flatMap((businessType) => targetRegions.map((region) => fetchAllBusinesses(settings, filters, businessType, region))));
+  return dedupeBusinesses(results.flat()).sort((left, right) => right.licenseDate.localeCompare(left.licenseDate));
 }
 
 export async function checkApiPermissions(settings: AppSettings): Promise<ApiPermissionStatus[]> {
@@ -143,6 +184,11 @@ function resolveTargetTypes(filters: SearchFilters): Array<Exclude<BusinessTypeK
   }
 
   return Object.keys(endpoints) as Array<Exclude<BusinessTypeKey, "all">>;
+}
+
+function resolveTargetRegions(filters: SearchFilters): string[] {
+  const regions = filters.regions?.length ? filters.regions : [filters.region];
+  return Array.from(new Set(regions.map((region) => region.trim()).filter(Boolean)));
 }
 
 async function checkApiPermission(settings: AppSettings, businessType: Exclude<BusinessTypeKey, "all">): Promise<ApiPermissionStatus> {
@@ -176,11 +222,12 @@ async function checkApiPermission(settings: AppSettings, businessType: Exclude<B
 async function fetchBusinesses(
   settings: AppSettings,
   filters: SearchFilters,
-  businessType: Exclude<BusinessTypeKey, "all">
+  businessType: Exclude<BusinessTypeKey, "all">,
+  region: string
 ): Promise<Business[]> {
   const pageSize = Math.min(Math.max(filters.pageSize, 10), 100);
   const pageNo = Math.max(filters.pageNo, 1);
-  const pageResults = await Promise.all(Array.from({ length: pageNo }, (_, index) => fetchBusinessPage(settings, filters, businessType, index + 1, pageSize)));
+  const pageResults = await Promise.all(Array.from({ length: pageNo }, (_, index) => fetchBusinessPage(settings, filters, businessType, region, index + 1, pageSize)));
   return pageResults.flat();
 }
 
@@ -188,6 +235,7 @@ async function fetchBusinessPage(
   settings: AppSettings,
   filters: SearchFilters,
   businessType: Exclude<BusinessTypeKey, "all">,
+  region: string,
   pageNo: number,
   pageSize: number
 ): Promise<Business[]> {
@@ -197,7 +245,7 @@ async function fetchBusinessPage(
   url.searchParams.set("numOfRows", String(pageSize));
   url.searchParams.set("returnType", "json");
 
-  const regionCode = regionCodes[filters.region];
+  const regionCode = regionCodeMap.get(region);
   if (regionCode) {
     url.searchParams.set("cond[OPN_ATMY_GRP_CD::EQ]", regionCode);
   }
@@ -231,29 +279,20 @@ async function fetchBusinessPage(
 
   const rawItems = payload?.response?.body?.items?.item;
   const items = Array.isArray(rawItems) ? rawItems : rawItems ? [rawItems] : [];
-  return items.map((item) => normalizeBusiness(item, businessType)).filter((business) => {
-    if (!regionCodes[filters.region]) {
-      return includesAny(business, filters.region, ["roadAddress", "jibunAddress", "businessName"]);
-    }
-
-    if (filters.region.includes("산본")) {
-      return includesAny(business, "산본", ["roadAddress", "jibunAddress"]);
-    }
-
-    return true;
-  });
+  return items.map((item) => normalizeBusiness(item, businessType)).filter((business) => matchesRegion(business, region));
 }
 
 async function fetchAllBusinesses(
   settings: AppSettings,
   filters: SearchFilters,
-  businessType: Exclude<BusinessTypeKey, "all">
+  businessType: Exclude<BusinessTypeKey, "all">,
+  region: string
 ): Promise<Business[]> {
   const pageSize = 100;
-  const firstPage = await fetchBusinessPageWithTotal(settings, filters, businessType, 1, pageSize);
+  const firstPage = await fetchBusinessPageWithTotal(settings, filters, businessType, region, 1, pageSize);
   const totalPages = Math.max(1, Math.ceil(firstPage.totalCount / pageSize));
   const remainingPages = await Promise.all(
-    Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) => fetchBusinessPageWithTotal(settings, filters, businessType, index + 2, pageSize))
+    Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) => fetchBusinessPageWithTotal(settings, filters, businessType, region, index + 2, pageSize))
   );
   return [firstPage, ...remainingPages].flatMap((page) => page.items);
 }
@@ -262,6 +301,7 @@ async function fetchBusinessPageWithTotal(
   settings: AppSettings,
   filters: SearchFilters,
   businessType: Exclude<BusinessTypeKey, "all">,
+  region: string,
   pageNo: number,
   pageSize: number
 ): Promise<{ items: Business[]; totalCount: number }> {
@@ -271,7 +311,7 @@ async function fetchBusinessPageWithTotal(
   url.searchParams.set("numOfRows", String(pageSize));
   url.searchParams.set("returnType", "json");
 
-  const regionCode = regionCodes[filters.region];
+  const regionCode = regionCodeMap.get(region);
   if (regionCode) {
     url.searchParams.set("cond[OPN_ATMY_GRP_CD::EQ]", regionCode);
   }
@@ -307,19 +347,35 @@ async function fetchBusinessPageWithTotal(
   const items = Array.isArray(rawItems) ? rawItems : rawItems ? [rawItems] : [];
   const totalCount = Number(payload?.response?.body?.totalCount || 0);
   return {
-    items: items.map((item) => normalizeBusiness(item, businessType)).filter((business) => {
-      if (!regionCodes[filters.region]) {
-        return includesAny(business, filters.region, ["roadAddress", "jibunAddress", "businessName"]);
-      }
-
-      if (filters.region.includes("산본")) {
-        return includesAny(business, "산본", ["roadAddress", "jibunAddress"]);
-      }
-
-      return true;
-    }),
+    items: items.map((item) => normalizeBusiness(item, businessType)).filter((business) => matchesRegion(business, region)),
     totalCount
   };
+}
+
+function matchesRegion(business: Business, region: string) {
+  const keyword = regionKeywordMap.get(region);
+  if (keyword) {
+    return includesAny(business, keyword, ["roadAddress", "jibunAddress"]);
+  }
+
+  if (!regionCodeMap.has(region)) {
+    return includesAny(business, region, ["roadAddress", "jibunAddress", "businessName"]);
+  }
+
+  return true;
+}
+
+function dedupeBusinesses(items: Business[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = item.id || `${item.businessName}-${item.licenseDate}-${item.roadAddress}-${item.jibunAddress}`;
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }
 
 function normalizeBusiness(raw: Record<string, string>, source: Exclude<BusinessTypeKey, "all">): Business {

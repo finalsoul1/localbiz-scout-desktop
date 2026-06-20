@@ -19,6 +19,7 @@ export type BusinessTypeKey =
 
 export type SearchFilters = {
   region: string;
+  regions?: string[];
   fromDate: string;
   toDate: string;
   businessType: BusinessTypeKey;

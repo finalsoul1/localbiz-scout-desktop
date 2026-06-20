@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { businessTypeMeta, checkApiPermissions, exportBusinesses, searchBusinesses } from "../businessApi";
+import { businessTypeMeta, checkApiPermissions, exportBusinesses, regionOptions, searchBusinesses } from "../businessApi";
 import { downloadCsv, openCsvLocation } from "../exportCsv";
 import { clearPermissionStatus, clearSettings, loadPermissionStatus, loadSettings, maskSecret, savePermissionStatus, saveSettings } from "../storage";
 import type { ApiPermissionStatus, AppSettings, Business, BusinessTypeKey, SearchFilters } from "../types";
@@ -26,6 +26,7 @@ export function App() {
   const [activeView, setActiveView] = useState<AppView>(() => (loadSettings().publicDataServiceKey ? "business" : "settings"));
   const [filters, setFilters] = useState<SearchFilters>({
     region: "산본",
+    regions: ["산본"],
     fromDate: "2026-06-01",
     toDate: today,
     businessType: "all",
@@ -93,6 +94,10 @@ export function App() {
     setNoticeFilePath("");
 
     try {
+      if (!selectedRegions(nextFilters).length) {
+        throw new Error("조회할 지역을 하나 이상 선택하세요.");
+      }
+
       const nextPermission = nextFilters.businessType === "all" ? null : permissionStatuses.find((status) => status.businessType === nextFilters.businessType);
       if (nextPermission && nextPermission.status !== "available") {
         throw new Error("선택한 업종은 공공데이터 API 승인 상태 확인이 필요합니다.");
@@ -328,14 +333,7 @@ export function App() {
           </div>
         </div>
 
-        <label className="lnb-region-select">
-          지역
-          <select value={filters.region} onChange={(event) => updateFilters({ region: event.target.value })}>
-            <option value="산본">산본</option>
-            <option value="군포">군포</option>
-            <option value="군포시">군포시</option>
-          </select>
-        </label>
+        <RegionMultiSelect selectedRegions={selectedRegions(filters)} onChange={(regions) => updateFilters({ region: regions[0] || "", regions })} />
 
         <nav className="lnb-nav" aria-label="주 메뉴">
           <section>
@@ -488,12 +486,73 @@ function hasMaskedAddress(item: Business) {
   return item.roadAddress.includes("*") || item.jibunAddress.includes("*");
 }
 
+function selectedRegions(filters: SearchFilters) {
+  return filters.regions?.length ? filters.regions : filters.region ? [filters.region] : [];
+}
+
 function SummaryCard({ label, value, tone = "default" }: { label: string; value: string; tone?: "default" | "mint" }) {
   return (
     <article className={`summary-card ${tone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
+  );
+}
+
+function RegionMultiSelect({ selectedRegions, onChange }: { selectedRegions: string[]; onChange: (regions: string[]) => void }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const selectedSet = new Set(selectedRegions);
+  const filteredOptions = regionOptions.filter((region) => region.label.includes(query.trim()));
+  const summary = selectedRegions.length ? selectedRegions.join(", ") : "지역 선택";
+  const countLabel = selectedRegions.length ? `${selectedRegions.length.toLocaleString("ko-KR")}개 지역 선택됨` : "조회할 지역을 선택하세요";
+
+  function toggleRegion(region: string) {
+    if (selectedSet.has(region)) {
+      const nextRegions = selectedRegions.filter((selectedRegion) => selectedRegion !== region);
+      onChange(nextRegions);
+      return;
+    }
+
+    onChange([...selectedRegions, region]);
+  }
+
+  return (
+    <section className="lnb-region-select">
+      <span>지역</span>
+      <button type="button" className="region-select-trigger" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <strong>{summary}</strong>
+        <small>{countLabel}</small>
+      </button>
+      {open ? (
+        <div className="region-popover">
+          <input value={query} placeholder="지역 검색" onChange={(event) => setQuery(event.target.value)} autoFocus />
+          <div className="region-chip-row">
+            <button type="button" onClick={() => onChange(["산본"])}>
+              산본
+            </button>
+            <button type="button" onClick={() => onChange(["군포"])}>
+              군포
+            </button>
+            <button type="button" onClick={() => onChange([])}>
+              전체 해제
+            </button>
+          </div>
+          <div className="region-option-list">
+            {filteredOptions.length ? (
+              filteredOptions.map((region) => (
+                <label key={region.label} className="region-option">
+                  <input type="checkbox" checked={selectedSet.has(region.label)} onChange={() => toggleRegion(region.label)} />
+                  <span>{region.label}</span>
+                </label>
+              ))
+            ) : (
+              <div className="region-empty">검색 결과 없음</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
