@@ -23,7 +23,6 @@ jobs:
     name: Build macOS
     runs-on: macos-latest
     env:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
@@ -49,11 +48,15 @@ jobs:
 
       - name: Prepare updater signing key
         shell: bash
+        env:
+          RAW_TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          if [[ "${TAURI_SIGNING_PRIVATE_KEY}" == *"untrusted comment:"* ]]; then
+          if [[ "${RAW_TAURI_SIGNING_PRIVATE_KEY}" == *"untrusted comment:"* ]]; then
             mkdir -p "${RUNNER_TEMP}/tauri-signing"
-            printf '%s' "${TAURI_SIGNING_PRIVATE_KEY}" > "${RUNNER_TEMP}/tauri-signing/private.key"
-            echo "TAURI_SIGNING_PRIVATE_KEY=${RUNNER_TEMP}/tauri-signing/private.key" >> "${GITHUB_ENV}"
+            printf '%s' "${RAW_TAURI_SIGNING_PRIVATE_KEY}" > "${RUNNER_TEMP}/tauri-signing/private.key"
+            echo "TAURI_SIGNING_PRIVATE_KEY_PATH=${RUNNER_TEMP}/tauri-signing/private.key" >> "${GITHUB_ENV}"
+          else
+            echo "TAURI_SIGNING_PRIVATE_KEY=${RAW_TAURI_SIGNING_PRIVATE_KEY}" >> "${GITHUB_ENV}"
           fi
 
       - name: Build macOS app
@@ -92,7 +95,6 @@ jobs:
     name: Build Windows
     runs-on: windows-latest
     env:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
@@ -118,13 +120,17 @@ jobs:
 
       - name: Prepare updater signing key
         shell: pwsh
+        env:
+          RAW_TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          if ($env:TAURI_SIGNING_PRIVATE_KEY -like "*untrusted comment:*") {
+          if ($env:RAW_TAURI_SIGNING_PRIVATE_KEY -like "*untrusted comment:*") {
             $keyDir = Join-Path $env:RUNNER_TEMP "tauri-signing"
             $keyPath = Join-Path $keyDir "private.key"
             New-Item -ItemType Directory -Force -Path $keyDir | Out-Null
-            Set-Content -Path $keyPath -Value $env:TAURI_SIGNING_PRIVATE_KEY -NoNewline
-            "TAURI_SIGNING_PRIVATE_KEY=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Set-Content -Path $keyPath -Value $env:RAW_TAURI_SIGNING_PRIVATE_KEY -NoNewline
+            "TAURI_SIGNING_PRIVATE_KEY_PATH=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+            "TAURI_SIGNING_PRIVATE_KEY=$env:RAW_TAURI_SIGNING_PRIVATE_KEY" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           }
 
       - name: Build Windows installer
