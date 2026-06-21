@@ -22,6 +22,9 @@ jobs:
   build-macos:
     name: Build macOS
     runs-on: macos-latest
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -54,26 +57,34 @@ jobs:
             LABEL="latest"
           fi
           ARCH="$(uname -m)"
+          mkdir -p release-assets
           ditto -c -k --sequesterRsrc --keepParent \
             "src-tauri/target/release/bundle/macos/상권스카우트.app" \
-            "sanggwon-scout-${LABEL}-macos-${ARCH}.app.zip"
+            "release-assets/sanggwon-scout-${LABEL}-macos-${ARCH}.app.zip"
+          cp "src-tauri/target/release/bundle/macos/상권스카우트.app.tar.gz" \
+            "release-assets/sanggwon-scout-${LABEL}-macos-${ARCH}.app.tar.gz"
+          cp "src-tauri/target/release/bundle/macos/상권스카우트.app.tar.gz.sig" \
+            "release-assets/sanggwon-scout-${LABEL}-macos-${ARCH}.app.tar.gz.sig"
 
       - name: Upload macOS release asset
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: sanggwon-scout-${{ github.ref_name }}-macos-*.app.zip
+          files: release-assets/*
 
       - name: Upload macOS workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: sanggwon-scout-macos
-          path: sanggwon-scout-*-macos-*.app.zip
+          path: release-assets/*
           if-no-files-found: error
 
   build-windows:
     name: Build Windows
     runs-on: windows-latest
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -109,6 +120,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
           Get-ChildItem src-tauri/target/release/bundle/nsis -Filter *.exe -ErrorAction SilentlyContinue |
             ForEach-Object { Copy-Item $_.FullName "release-assets/sanggwon-scout-$label-windows-x64-setup.exe" }
+          Get-ChildItem src-tauri/target/release/bundle/nsis -Filter *.exe.sig -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName "release-assets/sanggwon-scout-$label-windows-x64-setup.exe.sig" }
 
       - name: Upload Windows release assets
         uses: softprops/action-gh-release@v2
@@ -144,6 +157,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-assets
+
+      - name: Create updater manifest
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          node scripts/create-updater-manifest.mjs \
+            --assetsDir=release-assets \
+            --repo=${{ github.repository }} \
+            --tag=latest \
+            --version="${VERSION}" \
+            --notes="main 브랜치 최신 자동 빌드입니다."
 
       - name: Publish latest release assets
         uses: softprops/action-gh-release@v2

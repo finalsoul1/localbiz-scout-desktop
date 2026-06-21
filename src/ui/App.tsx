@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type Update } from "@tauri-apps/plugin-updater";
 import { businessTypeMeta, checkApiPermissions, exportBusinesses, regionOptions, searchBusinesses } from "../businessApi";
 import { downloadCsv, openCsvLocation } from "../exportCsv";
 import { clearPermissionStatus, clearSettings, loadPermissionStatus, loadSettings, maskSecret, savePermissionStatus, saveSettings } from "../storage";
@@ -19,7 +21,16 @@ type ToastState = {
   filePath?: string;
 };
 
-type AppView = "business" | "export" | "permissions" | "settings";
+type AppView = "business" | "export" | "permissions" | "settings" | "updates";
+
+type UpdateState =
+  | { status: "idle"; message: string }
+  | { status: "checking"; message: string }
+  | { status: "available"; message: string; version: string; currentVersion: string; notes?: string }
+  | { status: "latest"; message: string }
+  | { status: "downloading"; message: string; downloaded: number; total?: number }
+  | { status: "installed"; message: string }
+  | { status: "error"; message: string };
 
 export function App() {
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
@@ -46,7 +57,9 @@ export function App() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [permissionStatuses, setPermissionStatuses] = useState<ApiPermissionStatus[]>(() => loadPermissionStatus()?.statuses || []);
   const [checkingPermissions, setCheckingPermissions] = useState(false);
+  const [updateState, setUpdateState] = useState<UpdateState>({ status: "idle", message: "업데이트 확인 전" });
   const toastTimerRef = useRef<number | null>(null);
+  const pendingUpdateRef = useRef<Update | null>(null);
 
   const canSearch = Boolean(settings.publicDataServiceKey);
   const availableBusinessTypes = useMemo(
@@ -354,6 +367,9 @@ export function App() {
             <button type="button" className={activeView === "settings" ? "active" : ""} onClick={() => setActiveView("settings")}>
               API 설정
             </button>
+            <button type="button" className={activeView === "updates" ? "active" : ""} onClick={() => setActiveView("updates")}>
+              업데이트
+            </button>
           </section>
         </nav>
 
@@ -437,6 +453,16 @@ export function App() {
           <SettingsPanel settings={settings} onSave={handleSaveSettings} onClear={handleClearSettings} onClose={() => setActiveView("business")} />
         ) : null}
 
+        {activeView === "updates" ? (
+          <UpdatePanel
+            updateState={updateState}
+            isTauriRuntime={isTauriRuntime}
+            onCheck={handleCheckUpdate}
+            onInstall={handleInstallUpdate}
+            onRelaunch={() => void relaunch()}
+          />
+        ) : null}
+
         {toast ? <Toast toast={toast} onClose={() => setToast(null)} onOpenLocation={handleOpenCsvLocation} /> : null}
       </main>
     </div>
@@ -451,6 +477,77 @@ export function App() {
         type: "error",
         title: "파일 위치 열기 실패",
         message
+      });
+    }
+  }
+
+  async function handleCheckUpdate() {
+    if (!isTauriRuntime) {
+      setUpdateState({ status: "error", message: "브라우저 개발 모드에서는 업데이트 확인을 사용할 수 없습니다." });
+      return;
+    }
+
+    pendingUpdateRef.current = null;
+    setUpdateState({ status: "checking", message: "업데이트 정보를 확인하고 있습니다." });
+
+    try {
+      const nextUpdate = await check();
+      if (!nextUpdate) {
+        setUpdateState({ status: "latest", message: "현재 최신 버전을 사용 중입니다." });
+        return;
+      }
+
+      pendingUpdateRef.current = nextUpdate;
+      setUpdateState({
+        status: "available",
+        message: `새 버전 ${nextUpdate.version}을 설치할 수 있습니다.`,
+        version: nextUpdate.version,
+        currentVersion: nextUpdate.currentVersion,
+        notes: nextUpdate.body
+      });
+    } catch (caught) {
+      setUpdateState({
+        status: "error",
+        message: caught instanceof Error ? caught.message : "업데이트 확인 중 오류가 발생했습니다."
+      });
+    }
+  }
+
+  async function handleInstallUpdate() {
+    const pendingUpdate = pendingUpdateRef.current;
+    if (!pendingUpdate) {
+      setUpdateState({ status: "error", message: "설치할 업데이트가 없습니다. 먼저 업데이트를 확인하세요." });
+      return;
+    }
+
+    let downloaded = 0;
+    let total: number | undefined;
+    setUpdateState({ status: "downloading", message: "업데이트를 다운로드하고 있습니다.", downloaded, total });
+
+    try {
+      await pendingUpdate.downloadAndInstall((event) => {
+        if (event.event === "Started") {
+          total = event.data.contentLength;
+          downloaded = 0;
+          setUpdateState({ status: "downloading", message: "업데이트 다운로드를 시작했습니다.", downloaded, total });
+        }
+
+        if (event.event === "Progress") {
+          downloaded += event.data.chunkLength;
+          setUpdateState({ status: "downloading", message: "업데이트를 다운로드하고 있습니다.", downloaded, total });
+        }
+
+        if (event.event === "Finished") {
+          setUpdateState({ status: "downloading", message: "다운로드가 완료되어 설치 중입니다.", downloaded, total });
+        }
+      });
+
+      pendingUpdateRef.current = null;
+      setUpdateState({ status: "installed", message: "업데이트 설치가 완료되었습니다. 앱을 다시 시작하세요." });
+    } catch (caught) {
+      setUpdateState({
+        status: "error",
+        message: caught instanceof Error ? caught.message : "업데이트 설치 중 오류가 발생했습니다."
       });
     }
   }
@@ -473,6 +570,8 @@ function viewTitle(view: AppView) {
       return "승인 상태";
     case "settings":
       return "API 설정";
+    case "updates":
+      return "업데이트";
     default:
       return "사업자 조회";
   }
@@ -944,6 +1043,98 @@ function permissionStatusLabel(status: ApiPermissionStatus["status"]) {
       return "확인 실패";
     default:
       return "확인 필요";
+  }
+}
+
+function UpdatePanel({
+  updateState,
+  isTauriRuntime,
+  onCheck,
+  onInstall,
+  onRelaunch
+}: {
+  updateState: UpdateState;
+  isTauriRuntime: boolean;
+  onCheck: () => void;
+  onInstall: () => void;
+  onRelaunch: () => void;
+}) {
+  const canInstall = updateState.status === "available";
+  const progressPercent =
+    updateState.status === "downloading" && updateState.total
+      ? Math.min(100, Math.round((updateState.downloaded / updateState.total) * 100))
+      : null;
+
+  return (
+    <section className="update-panel">
+      <div className="section-heading">
+        <div>
+          <h2>앱 업데이트</h2>
+          <p>GitHub Releases의 updater manifest를 확인하고, 새 버전이 있으면 다운로드 후 설치합니다.</p>
+        </div>
+        <button type="button" className="secondary-button" disabled={!isTauriRuntime || updateState.status === "checking" || updateState.status === "downloading"} onClick={onCheck}>
+          {updateState.status === "checking" ? "확인 중" : "업데이트 확인"}
+        </button>
+      </div>
+
+      <div className={`update-status update-${updateState.status}`}>
+        <strong>{updateStatusTitle(updateState)}</strong>
+        <span>{updateState.message}</span>
+        {updateState.status === "available" ? (
+          <dl>
+            <div>
+              <dt>현재 버전</dt>
+              <dd>{updateState.currentVersion}</dd>
+            </div>
+            <div>
+              <dt>새 버전</dt>
+              <dd>{updateState.version}</dd>
+            </div>
+          </dl>
+        ) : null}
+        {updateState.status === "available" && updateState.notes ? <p>{updateState.notes}</p> : null}
+        {updateState.status === "downloading" ? (
+          <div className="update-progress" aria-label="업데이트 다운로드 진행률">
+            <div style={{ width: `${progressPercent ?? 20}%` }} />
+            <span>
+              {progressPercent !== null
+                ? `${progressPercent}%`
+                : `${updateState.downloaded.toLocaleString("ko-KR")} bytes 다운로드됨`}
+            </span>
+          </div>
+        ) : null}
+      </div>
+
+      {!isTauriRuntime ? <div className="notice-box">업데이트 확인은 설치된 데스크톱 앱에서만 사용할 수 있습니다.</div> : null}
+
+      <div className="button-row">
+        <button type="button" className="primary-button" disabled={!canInstall} onClick={onInstall}>
+          다운로드 및 설치
+        </button>
+        <button type="button" className="secondary-button" disabled={updateState.status !== "installed"} onClick={onRelaunch}>
+          앱 다시 시작
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function updateStatusTitle(updateState: UpdateState) {
+  switch (updateState.status) {
+    case "checking":
+      return "업데이트 확인 중";
+    case "available":
+      return "새 버전 있음";
+    case "latest":
+      return "최신 버전";
+    case "downloading":
+      return "다운로드 중";
+    case "installed":
+      return "설치 완료";
+    case "error":
+      return "업데이트 오류";
+    default:
+      return "업데이트 대기";
   }
 }
 

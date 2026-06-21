@@ -30,7 +30,7 @@ npm run dev
 
 | 조건 | 설명 |
 |---|---|
-| `region` | `군포`, `군포시`, `산본` |
+| `region`, `regions` | 경기도 시군 및 `산본`, `분당`, `일산` alias |
 | `fromDate` | 인허가일자 시작일 |
 | `toDate` | 인허가일자 종료일 |
 | `businessType` | `all`, `mailOrder`, `doorToDoorSales`, `largeStore`, `generalRestaurant`, `beautySalon`, `pharmacy`, `clinic`, `lodging`, `karaokeRoom`, `martialArtsDojo`, `tobaccoRetailer` |
@@ -42,11 +42,12 @@ npm run dev
 - 공공데이터 API 직접 조회
 - 업종별 API 승인 상태 자동 진단
 - 승인된 업종 기준 전체 조회
-- 군포/산본 지역 코드 `4020000` 적용
+- 경기도 다중 지역 선택 조회
 - 주소 마스킹 제외 필터
 - 현재 페이지 CSV 저장
 - 전체 결과 CSV 저장
 - CSV 저장 위치 열기
+- 앱 업데이트 확인 및 설치
 - Kakao Local API 주소/연락처 보강 선택 지원
 
 ## 빌드
@@ -60,6 +61,23 @@ macOS 빌드 산출물은 기본적으로 아래에 생성됩니다.
 ```text
 src-tauri/target/release/bundle/
 ```
+
+## 업데이트 설정
+
+Tauri updater는 서명 키가 필수입니다. private key는 커밋하지 않고 GitHub Actions Secret에 저장합니다.
+
+```bash
+npm run tauri signer generate -- -w ~/.tauri/localbiz-scout-updater.key
+```
+
+생성된 public key를 `src-tauri/tauri.conf.json`의 `plugins.updater.pubkey`에 넣고, private key는 GitHub Secrets에 등록합니다.
+
+| Secret | 설명 |
+|---|---|
+| `TAURI_SIGNING_PRIVATE_KEY` | private key 파일 내용 또는 경로 |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | private key 비밀번호. 비밀번호가 없으면 빈 값 |
+
+`main` 빌드가 성공하면 `latest` 릴리즈에 updater artifact와 `latest.json`을 등록합니다.
 
 ## 다음 단계
 
