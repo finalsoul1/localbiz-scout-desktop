@@ -47,6 +47,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Prepare updater signing key
+        shell: bash
+        run: |
+          if [[ "${TAURI_SIGNING_PRIVATE_KEY}" == *"untrusted comment:"* ]]; then
+            mkdir -p "${RUNNER_TEMP}/tauri-signing"
+            printf '%s' "${TAURI_SIGNING_PRIVATE_KEY}" > "${RUNNER_TEMP}/tauri-signing/private.key"
+            echo "TAURI_SIGNING_PRIVATE_KEY=${RUNNER_TEMP}/tauri-signing/private.key" >> "${GITHUB_ENV}"
+          fi
+
       - name: Build macOS app
         run: npm run tauri build -- --bundles app
 
@@ -106,6 +115,17 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Prepare updater signing key
+        shell: pwsh
+        run: |
+          if ($env:TAURI_SIGNING_PRIVATE_KEY -like "*untrusted comment:*") {
+            $keyDir = Join-Path $env:RUNNER_TEMP "tauri-signing"
+            $keyPath = Join-Path $keyDir "private.key"
+            New-Item -ItemType Directory -Force -Path $keyDir | Out-Null
+            Set-Content -Path $keyPath -Value $env:TAURI_SIGNING_PRIVATE_KEY -NoNewline
+            "TAURI_SIGNING_PRIVATE_KEY=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }
 
       - name: Build Windows installer
         run: npm run tauri build -- --bundles nsis
