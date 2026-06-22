@@ -37,7 +37,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhGMUY0RkY3MjFEN0NCQzkKUldUSnk5Y2g5MDhmajlIdnNJL0kvZW5JSDN5eWxRaG0zNm1ybjhXeGp4QXNHL3grNkxMOXJ4UU4K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcxNjk3Qzk5OEI5MjczM0QKUldROWM1S0xtWHhwY1cwK3hsRld1allMOW5CV3dNM28yNTQrZ1lrYWdPTU9GTW10VGN0T2ZXdWgK",
       "endpoints": [
         "https://github.com/finalsoul1/localbiz-scout-desktop/releases/download/latest/latest.json"
       ],
