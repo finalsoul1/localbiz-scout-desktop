@@ -6,7 +6,8 @@ const PERMISSION_STATUS_KEY = "localbiz-scout.permissionStatus.v1";
 export function loadSettings(): AppSettings {
   const fallback: AppSettings = {
     publicDataServiceKey: "",
-    kakaoRestApiKey: ""
+    kakaoRestApiKey: "",
+    autoUpdateEnabled: true
   };
 
   try {

@@ -61,6 +61,7 @@ export function App() {
   const [updateState, setUpdateState] = useState<UpdateState>({ status: "idle", message: "업데이트 확인 전" });
   const toastTimerRef = useRef<number | null>(null);
   const pendingUpdateRef = useRef<Update | null>(null);
+  const startupUpdateCheckedRef = useRef(false);
 
   const canSearch = Boolean(settings.publicDataServiceKey);
   const availableBusinessTypes = useMemo(
@@ -172,7 +173,7 @@ export function App() {
   function handleClearSettings() {
     clearSettings();
     clearPermissionStatus();
-    setSettings({ publicDataServiceKey: "", kakaoRestApiKey: "" });
+    setSettings({ publicDataServiceKey: "", kakaoRestApiKey: "", autoUpdateEnabled: true });
     setPermissionStatuses([]);
     setActiveView("settings");
     setItems([]);
@@ -183,6 +184,15 @@ export function App() {
       void refreshPermissions(settings, false);
     }
   }, [settings.publicDataServiceKey]);
+
+  useEffect(() => {
+    if (!isTauriRuntime || !settings.autoUpdateEnabled || startupUpdateCheckedRef.current) {
+      return;
+    }
+
+    startupUpdateCheckedRef.current = true;
+    void checkForUpdate(true);
+  }, [settings.autoUpdateEnabled]);
 
   async function refreshPermissions(nextSettings = settings, showSuccessToast = true) {
     if (!nextSettings.publicDataServiceKey) {
@@ -262,6 +272,17 @@ export function App() {
         title: "링크 열기 실패",
         message: caught instanceof Error ? caught.message : "기본 브라우저를 열지 못했습니다."
       });
+    }
+  }
+
+  function handleAutoUpdateChange(enabled: boolean) {
+    const nextSettings = { ...settings, autoUpdateEnabled: enabled };
+    saveSettings(nextSettings);
+    setSettings(nextSettings);
+
+    if (enabled && updateState.status !== "checking" && updateState.status !== "downloading" && updateState.status !== "installed") {
+      startupUpdateCheckedRef.current = true;
+      void checkForUpdate(true);
     }
   }
 
@@ -381,7 +402,8 @@ export function App() {
               API 설정
             </button>
             <button type="button" className={activeView === "updates" ? "active" : ""} onClick={() => setActiveView("updates")}>
-              업데이트
+              <span>업데이트</span>
+              {hasUpdateNotice(updateState) ? <span className="lnb-update-badge">{updateMenuBadge(updateState)}</span> : null}
             </button>
           </section>
         </nav>
@@ -420,6 +442,25 @@ export function App() {
               </button>
             ) : null}
           </div>
+        ) : null}
+
+        {hasUpdateNotice(updateState) ? (
+          <section className={`update-banner update-banner-${updateState.status}`} role="status" aria-live="polite">
+            <div>
+              <strong>{updateStatusTitle(updateState)}</strong>
+              <span>{updateState.message}</span>
+            </div>
+            <div className="button-row">
+              <button type="button" className="secondary-button" onClick={() => setActiveView("updates")}>
+                업데이트 보기
+              </button>
+              {updateState.status === "installed" ? (
+                <button type="button" className="primary-button" onClick={() => void relaunch()}>
+                  앱 다시 시작
+                </button>
+              ) : null}
+            </div>
+          </section>
         ) : null}
 
         {activeView === "business" ? (
@@ -483,6 +524,8 @@ export function App() {
           <UpdatePanel
             updateState={updateState}
             isTauriRuntime={isTauriRuntime}
+            autoUpdateEnabled={settings.autoUpdateEnabled}
+            onAutoUpdateChange={handleAutoUpdateChange}
             onCheck={handleCheckUpdate}
             onInstall={handleInstallUpdate}
             onRelaunch={() => void relaunch()}
@@ -508,6 +551,10 @@ export function App() {
   }
 
   async function handleCheckUpdate() {
+    await checkForUpdate(false);
+  }
+
+  async function checkForUpdate(autoInstall: boolean) {
     if (!isTauriRuntime) {
       setUpdateState({ status: "error", message: "브라우저 개발 모드에서는 업데이트 확인을 사용할 수 없습니다." });
       return;
@@ -526,11 +573,17 @@ export function App() {
       pendingUpdateRef.current = nextUpdate;
       setUpdateState({
         status: "available",
-        message: `새 버전 ${nextUpdate.version}을 설치할 수 있습니다.`,
+        message: autoInstall
+          ? `새 버전 ${nextUpdate.version}을 발견했습니다. 자동으로 다운로드합니다.`
+          : `새 버전 ${nextUpdate.version}을 설치할 수 있습니다.`,
         version: nextUpdate.version,
         currentVersion: nextUpdate.currentVersion,
         notes: nextUpdate.body
       });
+
+      if (autoInstall) {
+        await installUpdate(nextUpdate);
+      }
     } catch (caught) {
       setUpdateState({
         status: "error",
@@ -546,6 +599,10 @@ export function App() {
       return;
     }
 
+    await installUpdate(pendingUpdate);
+  }
+
+  async function installUpdate(pendingUpdate: Update) {
     let downloaded = 0;
     let total: number | undefined;
     setUpdateState({ status: "downloading", message: "업데이트를 다운로드하고 있습니다.", downloaded, total });
@@ -1084,12 +1141,16 @@ function permissionStatusLabel(status: ApiPermissionStatus["status"]) {
 function UpdatePanel({
   updateState,
   isTauriRuntime,
+  autoUpdateEnabled,
+  onAutoUpdateChange,
   onCheck,
   onInstall,
   onRelaunch
 }: {
   updateState: UpdateState;
   isTauriRuntime: boolean;
+  autoUpdateEnabled: boolean;
+  onAutoUpdateChange: (enabled: boolean) => void;
   onCheck: () => void;
   onInstall: () => void;
   onRelaunch: () => void;
@@ -1111,6 +1172,19 @@ function UpdatePanel({
           {updateState.status === "checking" ? "확인 중" : "업데이트 확인"}
         </button>
       </div>
+
+      <label className="update-toggle-row">
+        <span>
+          <strong>자동 업데이트</strong>
+          <small>앱 시작 시 새 버전을 확인하고 자동으로 다운로드·설치합니다. 재시작은 직접 선택합니다.</small>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          checked={autoUpdateEnabled}
+          onChange={(event) => onAutoUpdateChange(event.target.checked)}
+        />
+      </label>
 
       <div className={`update-status update-${updateState.status}`}>
         <strong>{updateStatusTitle(updateState)}</strong>
@@ -1152,6 +1226,22 @@ function UpdatePanel({
       </div>
     </section>
   );
+}
+
+function hasUpdateNotice(updateState: UpdateState) {
+  return updateState.status === "available" || updateState.status === "downloading" || updateState.status === "installed";
+}
+
+function updateMenuBadge(updateState: UpdateState) {
+  if (updateState.status === "installed") {
+    return "재시작";
+  }
+
+  if (updateState.status === "downloading") {
+    return "진행 중";
+  }
+
+  return "NEW";
 }
 
 function updateStatusTitle(updateState: UpdateState) {

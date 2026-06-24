@@ -1,6 +1,7 @@
 export type AppSettings = {
   publicDataServiceKey: string;
   kakaoRestApiKey: string;
+  autoUpdateEnabled: boolean;
 };
 
 export type BusinessTypeKey =

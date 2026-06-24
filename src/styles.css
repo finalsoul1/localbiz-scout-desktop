@@ -216,6 +216,21 @@ select {
   cursor: pointer;
 }
 
+.lnb-nav button > span:first-child {
+  min-width: 0;
+}
+
+.lnb-update-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
+  border-radius: 999px;
+  padding: 3px 6px;
+  color: #087a73;
+  background: #d8f7f4;
+  font-size: 10px;
+  font-weight: 900;
+}
+
 .lnb-nav button.active,
 .lnb-nav button:not(:disabled):hover {
   color: #171b20;
@@ -439,6 +454,107 @@ select {
   padding: 18px;
   margin-bottom: 16px;
   max-width: 1080px;
+}
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1080px;
+  border: 1px solid #58cec7;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  color: #074d48;
+  background: #effcfa;
+}
+
+.update-banner > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.update-banner strong {
+  font-size: 14px;
+}
+
+.update-banner span {
+  color: #39736f;
+  font-size: 13px;
+}
+
+.update-banner .button-row {
+  flex: 0 0 auto;
+}
+
+.update-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #e6e8ec;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  background: #fbfcfd;
+  cursor: pointer;
+}
+
+.update-toggle-row > span {
+  display: grid;
+  gap: 3px;
+}
+
+.update-toggle-row strong {
+  color: #202428;
+  font-size: 14px;
+}
+
+.update-toggle-row small {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.update-toggle-row input {
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 22px;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: #cfd4dc;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.update-toggle-row input::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(16 24 40 / 24%);
+  transition: transform 160ms ease;
+}
+
+.update-toggle-row input:checked {
+  background: #19b9ae;
+}
+
+.update-toggle-row input:checked::before {
+  transform: translateX(16px);
+}
+
+.update-toggle-row input:focus-visible {
+  outline: 2px solid #b9ebe7;
+  outline-offset: 2px;
 }
 
 .settings-panel h2,
@@ -1363,9 +1479,14 @@ small {
   .workspace-topbar,
   .settings-footer,
   .action-row,
-  .section-heading {
+  .section-heading,
+  .update-banner {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .update-banner .button-row {
+    align-self: stretch;
   }
 
   .workspace-topbar {
