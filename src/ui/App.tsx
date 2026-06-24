@@ -3,6 +3,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { businessTypeMeta, checkApiPermissions, exportBusinesses, regionOptions, searchBusinesses } from "../businessApi";
 import { downloadCsv, openCsvLocation } from "../exportCsv";
+import { openExternalUrl } from "../externalLinks";
 import { clearPermissionStatus, clearSettings, loadPermissionStatus, loadSettings, maskSecret, savePermissionStatus, saveSettings } from "../storage";
 import type { ApiPermissionStatus, AppSettings, Business, BusinessTypeKey, SearchFilters } from "../types";
 
@@ -252,6 +253,18 @@ export function App() {
     }
   }
 
+  async function handleOpenExternalUrl(url: string) {
+    try {
+      await openExternalUrl(url);
+    } catch (caught) {
+      showToast({
+        type: "error",
+        title: "링크 열기 실패",
+        message: caught instanceof Error ? caught.message : "기본 브라우저를 열지 못했습니다."
+      });
+    }
+  }
+
   async function handlePageCsvSave() {
     setSavingCsv("page");
     setError("");
@@ -447,10 +460,23 @@ export function App() {
           />
         ) : null}
 
-        {activeView === "permissions" ? <PermissionPanel statuses={permissionStatuses} checking={checkingPermissions} onRefresh={() => void refreshPermissions(settings)} /> : null}
+        {activeView === "permissions" ? (
+          <PermissionPanel
+            statuses={permissionStatuses}
+            checking={checkingPermissions}
+            onRefresh={() => void refreshPermissions(settings)}
+            onOpenExternalUrl={(url) => void handleOpenExternalUrl(url)}
+          />
+        ) : null}
 
         {activeView === "settings" ? (
-          <SettingsPanel settings={settings} onSave={handleSaveSettings} onClear={handleClearSettings} onClose={() => setActiveView("business")} />
+          <SettingsPanel
+            settings={settings}
+            onSave={handleSaveSettings}
+            onClear={handleClearSettings}
+            onClose={() => setActiveView("business")}
+            onOpenExternalUrl={(url) => void handleOpenExternalUrl(url)}
+          />
         ) : null}
 
         {activeView === "updates" ? (
@@ -951,11 +977,13 @@ function Toast({ toast, onClose, onOpenLocation }: { toast: ToastState; onClose:
 function PermissionPanel({
   statuses,
   checking,
-  onRefresh
+  onRefresh,
+  onOpenExternalUrl
 }: {
   statuses: ApiPermissionStatus[];
   checking: boolean;
   onRefresh: () => void;
+  onOpenExternalUrl: (url: string) => void;
 }) {
   const availableCount = statuses.filter((status) => status.status === "available").length;
 
@@ -1010,9 +1038,16 @@ function PermissionPanel({
                     {status.status === "available" ? (
                       "-"
                     ) : (
-                      <a href={status.applyUrl} target="_blank" rel="noreferrer">
-                        열기
-                      </a>
+                      <div className="permission-actions">
+                        <button type="button" className="text-link-button" onClick={() => onOpenExternalUrl(status.applyUrl)}>
+                          서비스 상세
+                        </button>
+                        {status.status === "networkError" || status.status === "invalidKey" ? (
+                          <button type="button" className="text-link-button" onClick={() => onOpenExternalUrl("https://www.data.go.kr/iim/api/selectAcountList.do")}>
+                            신청 내역 점검
+                          </button>
+                        ) : null}
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -1142,12 +1177,14 @@ function SettingsPanel({
   settings,
   onSave,
   onClear,
-  onClose
+  onClose,
+  onOpenExternalUrl
 }: {
   settings: AppSettings;
   onSave: (settings: AppSettings) => void;
   onClear: () => void;
   onClose: () => void;
+  onOpenExternalUrl: (url: string) => void;
 }) {
   const [draft, setDraft] = useState(settings);
   const [guideOpen, setGuideOpen] = useState(() => !settings.publicDataServiceKey);
@@ -1172,7 +1209,7 @@ function SettingsPanel({
         </button>
         <span>처음 쓰는 사람은 공공데이터 키 발급과 업종별 활용신청이 필요합니다.</span>
       </div>
-      {guideOpen ? <ApiKeyGuide /> : null}
+      {guideOpen ? <ApiKeyGuide onOpenExternalUrl={onOpenExternalUrl} /> : null}
       <div className="settings-grid">
         <label>
           공공데이터포털 인증키 (필수)
@@ -1211,16 +1248,16 @@ function SettingsPanel({
   );
 }
 
-function ApiKeyGuide() {
+function ApiKeyGuide({ onOpenExternalUrl }: { onOpenExternalUrl: (url: string) => void }) {
   return (
     <section className="api-guide" aria-label="키 발급 안내">
       <div className="guide-card">
         <div>
           <strong>1. 공공데이터포털 인증키 발급</strong>
           <p>data.go.kr 로그인 후 마이페이지에서 일반 인증키를 확인합니다.</p>
-          <a href="https://www.data.go.kr/" target="_blank" rel="noreferrer">
-            공공데이터포털 열기
-          </a>
+          <button type="button" className="text-link-button" onClick={() => onOpenExternalUrl("https://www.data.go.kr/iim/api/selectAcountList.do")}>
+            인증키 확인 페이지 열기
+          </button>
         </div>
         <div className="guide-shot public-data-shot" aria-label="공공데이터포털 화면 예시">
           <div className="shot-topbar">data.go.kr</div>
@@ -1235,6 +1272,9 @@ function ApiKeyGuide() {
           <strong>2. 업종별 조회서비스 활용신청</strong>
           <p>필요한 업종 API를 각각 활용신청해야 합니다. 승인 상태 화면에서 빠진 업종과 신청 링크를 확인할 수 있습니다.</p>
           <small>예: 일반음식점, 미용업, 약국, 의원, 숙박업, 노래연습장업, 체육도장업, 담배소매업</small>
+          <button type="button" className="text-link-button guide-link-button" onClick={() => onOpenExternalUrl("https://www.data.go.kr/iim/api/selectAcountList.do")}>
+            활용신청 내역 열기
+          </button>
         </div>
         <div className="guide-shot apply-shot" aria-label="활용신청 화면 예시">
           <div className="shot-topbar">OpenAPI 상세</div>
@@ -1248,9 +1288,9 @@ function ApiKeyGuide() {
         <div>
           <strong>3. Kakao REST API Key (선택)</strong>
           <p>Kakao Developers에서 앱을 만들고 REST API Key를 복사합니다. 비워두면 주소/연락처 보강만 건너뜁니다.</p>
-          <a href="https://developers.kakao.com/console/app" target="_blank" rel="noreferrer">
+          <button type="button" className="text-link-button" onClick={() => onOpenExternalUrl("https://developers.kakao.com/console/app")}>
             Kakao Developers 열기
-          </a>
+          </button>
         </div>
         <div className="guide-shot kakao-shot" aria-label="Kakao Developers 화면 예시">
           <div className="shot-topbar">Kakao Developers</div>

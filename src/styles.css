@@ -612,18 +612,31 @@ select {
 
 .permission-table th:nth-child(4),
 .permission-table td:nth-child(4) {
-  width: 72px;
+  width: 148px;
   text-align: center;
 }
 
-.permission-table a {
+.text-link-button {
+  width: fit-content;
+  border: 0;
+  padding: 0;
   color: #087a73;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
   font-weight: 800;
   text-decoration: none;
+  cursor: pointer;
 }
 
-.permission-table a:hover {
+.text-link-button:hover {
   text-decoration: underline;
+}
+
+.permission-actions {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
 }
 
 .permission-badge {
@@ -709,15 +722,9 @@ select {
   line-height: 1.45;
 }
 
-.guide-card a {
-  color: #087a73;
-  font-size: 13px;
-  font-weight: 800;
-  text-decoration: none;
-}
-
-.guide-card a:hover {
-  text-decoration: underline;
+.guide-link-button {
+  display: block;
+  margin-top: 8px;
 }
 
 .guide-shot {

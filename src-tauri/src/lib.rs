@@ -596,6 +596,15 @@ fn open_file_location(path: String) -> Result<(), String> {
     open_path_in_file_manager(&file_path)
 }
 
+#[tauri::command]
+fn open_external_url(url: String) -> Result<(), String> {
+    if !is_allowed_external_url(&url) {
+        return Err("허용되지 않은 외부 URL입니다.".to_string());
+    }
+
+    open_url_in_browser(&url)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -610,7 +619,8 @@ pub fn run() {
             export_businesses,
             check_api_permissions,
             save_csv,
-            open_file_location
+            open_file_location,
+            open_external_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running LocalBiz Scout");
@@ -907,6 +917,44 @@ fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
         Ok(())
     } else {
         Err("파일 관리자 열기 명령이 실패했습니다.".to_string())
+    }
+}
+
+fn is_allowed_external_url(url: &str) -> bool {
+    [
+        "https://www.data.go.kr/",
+        "https://data.go.kr/",
+        "https://auth.data.go.kr/",
+        "https://developers.kakao.com/",
+        "https://accounts.kakao.com/",
+    ]
+    .iter()
+    .any(|prefix| url.starts_with(prefix))
+}
+
+fn open_url_in_browser(url: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let status = Command::new("open")
+        .arg(url)
+        .status()
+        .map_err(|error| format!("기본 브라우저 열기 실패: {error}"))?;
+
+    #[cfg(target_os = "windows")]
+    let status = Command::new("rundll32")
+        .args(["url.dll,FileProtocolHandler", url])
+        .status()
+        .map_err(|error| format!("기본 브라우저 열기 실패: {error}"))?;
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let status = Command::new("xdg-open")
+        .arg(url)
+        .status()
+        .map_err(|error| format!("기본 브라우저 열기 실패: {error}"))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err("기본 브라우저 열기 명령이 실패했습니다.".to_string())
     }
 }
 
