@@ -39,7 +39,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcxNjk3Qzk5OEI5MjczM0QKUldROWM1S0xtWHhwY1cwK3hsRld1allMOW5CV3dNM28yNTQrZ1lrYWdPTU9GTW10VGN0T2ZXdWgK",
       "endpoints": [
-        "https://github.com/finalsoul1/localbiz-scout-desktop/releases/download/latest/latest.json"
+        "https://github.com/finalsoul1/localbiz-scout-desktop/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"
