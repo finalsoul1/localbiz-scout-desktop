@@ -23,6 +23,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      previous_tag: ${{ steps.version.outputs.previous_tag }}
 
     steps:
       - name: Checkout
@@ -47,6 +48,7 @@ jobs:
 
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
           echo "tag=v${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "previous_tag=${LATEST_TAG}" >> "${GITHUB_OUTPUT}"
           echo "Next release: v${VERSION}"
 
   build-macos:
@@ -54,6 +56,7 @@ jobs:
     runs-on: macos-latest
     needs: prepare-version
     env:
+      PREVIOUS_TAG: ${{ needs.prepare-version.outputs.previous_tag }}
       RELEASE_VERSION: ${{ needs.prepare-version.outputs.version }}
       RELEASE_TAG: ${{ needs.prepare-version.outputs.tag }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -61,6 +64,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -220,16 +225,28 @@ jobs:
             --version="${RELEASE_VERSION}" \
             --notes="${RELEASE_TAG} 자동 배포 버전입니다."
 
+      - name: Create release notes
+        shell: bash
+        run: |
+          {
+            echo "## 주요 변경사항"
+            echo
+
+            if [ -n "${PREVIOUS_TAG}" ]; then
+              git log --format='- %s (`%h`)' "${PREVIOUS_TAG}..${GITHUB_SHA}"
+              echo
+              echo "[전체 변경사항 보기](https://github.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_TAG}...${RELEASE_TAG})"
+            else
+              git log --format='- %s (`%h`)' "${GITHUB_SHA}"
+            fi
+          } > release-notes.md
+
       - name: Publish versioned release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare-version.outputs.tag }}
           name: 상권스카우트 ${{ needs.prepare-version.outputs.tag }}
-          body: |
-            main 브랜치 푸시로 생성된 자동 배포 버전입니다.
-
-            Version: ${{ needs.prepare-version.outputs.version }}
-            Commit: ${{ github.sha }}
+          body_path: release-notes.md
           prerelease: false
           make_latest: true
           files: release-assets/**/*
